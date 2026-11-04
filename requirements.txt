@@ -1,11 +1,15 @@
-# Versions used to verify the release with Python 3.12 on Windows.
-geopandas==1.1.4
-matplotlib==3.11.2
+# Direct dependencies verified with Python 3.12 on Windows.
 numpy==2.5.3
 pandas==3.0.6
+xarray==2026.7.0
+dask[array]==2026.8.0
+netCDF4==1.7.4
+geopandas==1.1.4
 pyogrio==0.13.0
-pyproj==3.8.0
+rioxarray==0.23.0
 rasterio==1.5.1
-scikit-learn==1.9.1
-shap==0.52.0
 shapely==2.1.2
+pyproj==3.8.0
+matplotlib==3.11.2
+seaborn==0.13.2
+adjustText==1.4.0

@@ -1,138 +1,112 @@
-# Terrain conditioning of extreme daily rainfall in China
+# Extreme daily rainfall analysis with mountain overlays
 
-This repository provides the random forest and SHAP workflow for analysing
-associations between six terrain metrics and extreme daily rainfall in mainland
-China and Hainan. Run the workflow for the national domain or a supplied monsoon
-polygon. Choose daily rainfall maxima (mm) or cumulative extreme-rainfall
-grid-days as the response.
+This project extracts extreme-rainfall grid-days from daily NetCDF files,
+summarizes their annual, monthly and spatial distribution, and maps the
+results over ranked mountain lines. Its grid-count CSV can serve as the
+frequency input to the separate RF–SHAP workflow.
 
-## Installation
+## Install and run
 
-Use Python 3.12. From the repository root, create and activate an environment.
+Use Python 3.12. From the repository root, create an environment.
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate
 ```
 
-On Windows PowerShell, activate it with `.\.venv\Scripts\Activate.ps1`.
+Activate it with `.\.venv\Scripts\Activate.ps1` in PowerShell or
+`source .venv/bin/activate` in Bash. Then install the dependencies.
 
 ```bash
 python -m pip install -r requirements.txt
-python rf_shap_analysis.py --help
+python main.py --help
 ```
 
-## Inputs
+Place the required inputs in the locations below or set the corresponding
+environment variables. Relative paths resolve against the project folder.
+Shapefile inputs need their companion files, including `.dbf`, `.shx`
+and `.prj`. GeoPackage vectors can also be supplied.
 
-Supply the preprocessed analysis inputs locally. Paths below are examples relative
-to the current working directory. Keep the companion files of any shapefile
-together, including its `.shp`, `.shx`, `.dbf` and `.prj`.
-
-| Argument | Required input |
-| --- | --- |
-| `--mountains` | Mountain lines with a projected CRS in metres and the fields listed below. For the national workflow, supply the study-domain mountain inventory. |
-| `--rainfall` in intensity mode | GeoTIFF with a declared CRS. Band 1 contains historical daily rainfall maxima in mm. |
-| `--rainfall` in frequency mode | CSV with one row per grid centre, longitude and latitude in EPSG:4326, and a finite nonnegative extreme-day count. |
-| `--monsoon-boundary` | Polygon or multipolygon vector with a CRS, required for monsoon runs. Use the same study mask as the analysis being reproduced. |
-| `--taiwan-boundary` | Taiwan exclusion polygon with a CRS, required in frequency mode. The workflow excludes intersecting mountain segments because the study frequency input covers mainland China and Hainan. |
-| `--national-boundary`, `--inset-line` | Optional vector layers with a CRS for the observed-response map. The inset uses the bounds of the supplied line layer. |
-
-| Mountain field | Metric | Unit |
+| Default path | Environment variable | Input |
 | --- | --- | --- |
-| `macro_len` | F1, length of the parent mountain range | m |
-| `intersect_` | F2, ridge–flow angle | degrees |
-| `v_perp` | F3, ridge-normal climatological wind component | m/s |
-| `uplift_m` | F4, windward relative relief | m |
-| `dist_to_se` | F5, climatological coast-to-mountain airflow path length | m |
-| `block_cnt` | F6, upwind mountain-barrier count | count |
-| `wind_dir` | Meteorological wind direction used for the upwind shift | degrees |
+| `data/netcdf/` | `RAINFALL_NC_DIR` | Daily `.nc` files on a common rectilinear longitude–latitude grid. |
+| `data/study_area.shp` | `RAINFALL_BOUNDARY` | Study-domain polygons with a declared CRS. This layer defines the statistical domain. |
+| `data/mountains.shp` | `RAINFALL_MOUNTAINS` | Mountain lines with a CRS and `Rank` field. Values 0/1, 2 and 3 define the three line styles. |
+| `data/background.tif` | `RAINFALL_BACKGROUND_TIF` | Georeferenced RGB or single-band background covering the map extent. |
+| `results/` | `RAINFALL_OUTPUT_DIR` | New or empty directory for a full run. |
 
-### Data availability
-
-Supply the analysis-ready inputs separately. The original research datasets and
-study-specific processed layers are outside this repository. The
-[IPCC AR6 WGI Atlas monsoon domains](https://github.com/IPCC-WG1/Atlas/blob/main/reference-regions/README.md#monsoon-regions)
-are the upstream reference for the regional mask. To reproduce the study, use
-the study's processed mask and input versions. The script starts from those
-processed inputs. Source identifiers and preprocessing instructions for the
-remaining study inputs are pending.
-
-## Run the analysis
-
-Run the national daily rainfall maxima analysis.
+The default NetCDF variable is `prec`. It must contain daily precipitation
+totals in millimetres, with `time`, `lat` and `lon` dimensions. Supply
+one sample per day on each grid and use a calendar that pandas can parse
+for the temporal plots. Set `VAR_NAME` in `config.py` to match the data.
 
 ```bash
-python rf_shap_analysis.py --mode intensity --study-area national --mountains data/mountains.gpkg --rainfall data/maxrain85to24.tif --output results/national_intensity
+python main.py
 ```
 
-Run the monsoon-domain analysis for cumulative extreme-rainfall grid-days.
+The following PowerShell commands select another output folder and add
+a monsoon overlay.
 
-```bash
-python rf_shap_analysis.py --mode frequency --study-area monsoon --mountains data/mountains.gpkg --rainfall data/spatial_extremes_attr.csv --taiwan-boundary data/taiwan.gpkg --monsoon-boundary data/ChinaMonsoons.shp --frequency-x-column Lon --frequency-y-column Lat --frequency-value-column Frequency --frequency-missing-is-zero --output results/monsoon_frequency
+```powershell
+$env:RAINFALL_OUTPUT_DIR = "results/national_run"
+$env:RAINFALL_MONSOON = "data/monsoon.gpkg"
+python main.py
 ```
 
-To run intensity in the monsoon domain, select `--study-area monsoon` and supply
-`--monsoon-boundary`. For national frequency, select `--study-area national`
-and omit the monsoon boundary. Choose a new or empty output directory each time.
-Quote paths that contain spaces.
+Use `python main.py --map-only` to redraw the map from
+`extreme_events_r99p.csv` in the output directory. To also export grid maxima
+during a full run, use `python main.py --grid-max`. This option uses the
+clipped dataset after the wet-value filter.
 
-Use `--frequency-missing-is-zero` for a sparse event-grid CSV only after
-confirming complete coverage of the study domain. An unmatched, valid sampling
-area then represents zero events. The default stops on unmatched areas. By
-default, the frequency response sums counts across matched grid centres and
-keeps the cumulative total (`--frequency-aggregation sum --frequency-divisor 1`).
-Each grid centre contributes its count to every sampling area that contains it,
-so segment totals can overlap spatially.
+## Optional map layers
 
-## Workflow
+Set the corresponding paths to enable each layer. Each vector needs a CRS.
 
-1. Shift mountain segments 40 km upwind and buffer them by 30 km. In monsoon
-   mode, clip segment geometry and sampling areas to the supplied polygon,
-   retaining the original F1–F6 values. Frequency mode also subsets grid centres
-   to the polygon.
-2. Extract maximum rainfall in intensity mode or sum extreme-day counts in
-   frequency mode. Unresolved F5 paths are represented by a 6,000 km sentinel.
-3. Fit the F1–F6 random forest. Evaluate an 80/20 random holdout and five-fold
-   spatial cross-validation using 250 km blocks in EPSG:6933. Fit an F1–F4 and
-   F6 sensitivity model on the same samples and spatial folds.
-4. Export held-out predictions, permutation importance, SHAP values, pairwise
-   interactions, and importance intervals from resampling segment-level SHAP
-   values for the fitted model.
+| Environment variable | Layer |
+| --- | --- |
+| `RAINFALL_MONSOON` | Polygon overlay for the monsoon region. To run the statistics within that region, set `RAINFALL_BOUNDARY` to the regional mask as well. |
+| `RAINFALL_PROVINCES` | Provincial boundary polygons. |
+| `RAINFALL_CAPITALS` | Capital points with `ENG_NAME` by default. The label field is configurable. |
+| `RAINFALL_INSET_LINES` | Line layer for the South China Sea inset. Also provide inset polygons. |
+| `RAINFALL_INSET_BOUNDARY` | Inset polygons. Defaults to the provincial layer when that layer is supplied. |
 
-Study defaults use 1,000 trees, depth 15, a minimum leaf size of three,
-30 permutation repeats, 1,000 bootstrap replicates, and seed 42. The
-`--trees`, `--permutations` and `--shap-bootstraps` options allow shorter
-software checks. The spatial evaluation requires at least five populated blocks.
+The inset layers and background must cover the selected inset extent.
+Map colours, ranks, figure styles, mountain labels and inset geometry
+are configured in `config.py`. Mountain names use `Ename` by default
+when mountain labels are enabled. The map uses Times New Roman where
+available and DejaVu Serif as a fallback.
 
-## Outputs
+## Calculation and outputs
 
-Intensity plots retain the `TERPImax` suffix. Frequency plots retain
-`TERPIpotential` for compatibility. The frequency response is in grid-days
-under the study defaults.
+The default study settings pool values **strictly above 50 mm** inside the
+study polygon over the supplied dates and calculate their 99th percentile
+using NumPy's linear method. Each grid-day at or above that single
+threshold is counted once. The threshold is logged at run time. Temporal
+counts are grid-days, so one storm may contribute many records.
 
 | Output | Content |
 | --- | --- |
-| `cleaned_model_data.csv` | Sample identifiers, model features, and observed responses. |
-| `RF_random_holdout_predictions.csv` and `RF_spatial_CV_predictions.csv` | Observed and predicted values for the random test set and spatial folds, respectively. |
-| `RF_random_holdout_summary.csv`, `RF_spatial_CV_summary.csv`, `RF_validation_hierarchy_summary.csv` | Validation metrics and comparison of the evaluation schemes. |
-| `RF_SHAP_values_primary.csv` and `RF_SHAP_importance_primary.csv` | Sample-level SHAP and feature values, and mean absolute SHAP importance with bootstrap intervals. |
-| `RF_SHAP_interaction_matrix_primary.csv` | Mean absolute SHAP interaction values. |
-| `shap_dependence_plot_distance_*_binned_source.csv` and `*_sentinel_source.csv` | F5 curve medians and quartiles for resolved paths, plus a separate summary of unresolved paths. |
-| `study_area_mask.gpkg`, `study_area_mountain_segments.gpkg`, `study_area_audit.json` | Monsoon geometry and clipping audit. Monsoon frequency also exports `spatial_extremes_attr_Monsoon.csv`. |
-| `RF_SHAP_run_record.json` | Input paths, settings, package versions, sample counts, and key results. |
+| `extreme_events_r99p.csv` | Event date, latitude, longitude and daily precipitation in mm. |
+| `spatial_extremes_attr.csv` | `Lon`, `Lat`, `Max_Precipitation` and `Frequency` for grids with at least one selected event. |
+| `annual_extreme_scatter.png`, `monthly_extreme_scatter.png` | Temporal intensity and grid-day count plots. |
+| `spatial_extremes_map.png`, `.svg`, `.pdf`, `.tiff` | Spatial plot with mountain ranks, using the selected overlays. TIFF is exported at 600 DPI. |
+| `grid_max_rainfall.csv`, `grid_max_rainfall.tif`, `grid_max_rainfall_map.png` | Optional grid maxima from the clipped, wet-filtered dataset. |
 
-SHAP explains model associations. The F5 sentinel encodes unresolved paths,
-and the dependence curve uses resolved path lengths. The workflow supports
-susceptibility screening based on historical spatial associations.
+The frequency CSV contains event-bearing grid centres. Confirm study-domain
+coverage before interpreting absence from the table as zero. The spatial
+display keeps the intensity and count peaks per 0.4° cell by default.
+The CSV uses the full event-grid aggregation.
 
-## 中文使用说明
+The percentile calculation stages valid samples in a temporary disk file in
+the output directory. Allow sufficient disk space and memory for the event
+table. `PROCESS_TIME_CHUNK_DAYS` controls the reading batch size.
 
-用 Python 3.12 安装 `requirements.txt` 后，按上面的命令替换本机数据路径。
-`--mode intensity` 对应日降雨极值，`--mode frequency` 对应极端降雨累计网格日数。
-选择 `--study-area monsoon` 时提供季风区边界。频次模式需要台湾排除边界，只有确认
-事件网格表覆盖完整时才开启 `--frequency-missing-is-zero`。每次运行指定新的结果目录。
+## Data and rights
 
-## Copyright
+Supply the study rainfall data, boundary vectors, mountain lines and
+background raster separately. Exact source identifiers and input versions
+for study replication are pending. Publish third-party layers only under
+their applicable terms.
 
 Copyright (c) 2026 Bingxue Li. Commercial use requires the copyright holder's
 permission. Software licensing terms are pending.
+
