@@ -1,0 +1,11 @@
+# Versions used to verify the release with Python 3.12 on Windows.
+geopandas==1.1.4
+matplotlib==3.11.2
+numpy==2.5.3
+pandas==3.0.6
+pyogrio==0.13.0
+pyproj==3.8.0
+rasterio==1.5.1
+scikit-learn==1.9.1
+shap==0.52.0
+shapely==2.1.2
