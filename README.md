@@ -125,13 +125,6 @@ SHAP explains model associations. The F5 sentinel encodes unresolved paths,
 and the dependence curve uses resolved path lengths. The workflow supports
 susceptibility screening based on historical spatial associations.
 
-## 中文使用说明
-
-用 Python 3.12 安装 `requirements.txt` 后，按上面的命令替换本机数据路径。
-`--mode intensity` 对应日降雨极值，`--mode frequency` 对应极端降雨累计网格日数。
-选择 `--study-area monsoon` 时提供季风区边界。频次模式需要台湾排除边界，只有确认
-事件网格表覆盖完整时才开启 `--frequency-missing-is-zero`。每次运行指定新的结果目录。
-
 ## Copyright
 
 Copyright (c) 2026 Bingxue Li. Commercial use requires the copyright holder's
